@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ordermanager.mapper.OrderMapper">
+
+    <!-- 关联查询结果映射 -->
+    <resultMap id="OrderDetailMap" type="com.ordermanager.entity.Order">
+        <id column="order_id" property="orderId" typeHandler="com.ordermanager.handler.UUIDTypeHandler"/>
+        <result column="customer_id" property="customerId" typeHandler="com.ordermanager.handler.UUIDTypeHandler"/>
+        <result column="equipment_id" property="equipmentId" typeHandler="com.ordermanager.handler.UUIDTypeHandler"/>
+        <result column="order_type" property="orderType"/>
+        <result column="order_amount" property="orderAmount"/>
+        <result column="delivery_date" property="deliveryDate"/>
+        <result column="order_status" property="orderStatus"/>
+        <result column="remarks" property="remarks"/>
+        <result column="created_by" property="createdBy" typeHandler="com.ordermanager.handler.UUIDTypeHandler"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="last_modified_at" property="lastModifiedAt"/>
+        <!-- 关联字段 -->
+        <result column="customer_name" property="customerName"/>
+        <result column="customer_phone" property="customerPhone"/>
+        <result column="equipment_name" property="equipmentName"/>
+        <result column="equipment_spec" property="equipmentSpec"/>
+        <result column="creator_name" property="creatorName"/>
+    </resultMap>
+
+    <!-- 分页查询订单列表 -->
+    <select id="selectOrderPage" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               c.contact_phone AS customer_phone,
+               e.equipment_name,
+               e.specification AS equipment_spec,
+               r.role_name AS creator_name
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        LEFT JOIN equipment e ON o.equipment_id = e.equipment_id
+        LEFT JOIN sys_user_role r ON o.created_by = r.user_id
+        WHERE o.deleted = false
+        <if test="orderType != null and orderType != ''">
+            AND o.order_type = #{orderType}
+        </if>
+        <if test="orderStatus != null and orderStatus != ''">
+            AND o.order_status = #{orderStatus}
+        </if>
+        <if test="startDate != null">
+            AND o.delivery_date >= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND o.delivery_date &lt;= #{endDate}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                o.order_id::text ILIKE CONCAT('%', #{keyword}, '%')
+                OR c.customer_name ILIKE CONCAT('%', #{keyword}, '%')
+                OR e.equipment_code ILIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        ORDER BY o.last_modified_at DESC
+    </select>
+
+    <!-- 根据ID查询（走 resultMap 处理 UUID 类型） -->
+    <select id="selectByIdMapped" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               c.contact_phone AS customer_phone,
+               e.equipment_name,
+               e.specification AS equipment_spec,
+               r.role_name AS creator_name
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        LEFT JOIN equipment e ON o.equipment_id = e.equipment_id
+        LEFT JOIN sys_user_role r ON o.created_by = r.user_id
+        WHERE o.order_id = #{orderId}
+          AND o.deleted = false
+    </select>
+
+    <!-- 查询今日同客户同设备的活跃订单（用于覆盖逻辑，走 resultMap 处理 UUID 类型） -->
+    <select id="selectActiveDuplicate" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               c.contact_phone AS customer_phone,
+               e.equipment_name,
+               e.specification AS equipment_spec,
+               r.role_name AS creator_name
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        LEFT JOIN equipment e ON o.equipment_id = e.equipment_id
+        LEFT JOIN sys_user_role r ON o.created_by = r.user_id
+        WHERE o.customer_id = #{customerId, typeHandler=com.ordermanager.handler.UUIDTypeHandler}
+          AND o.equipment_id = #{equipmentId, typeHandler=com.ordermanager.handler.UUIDTypeHandler}
+          AND DATE(o.created_at) = CURRENT_DATE
+          AND o.deleted = false
+          AND o.order_status IN ('pending', 'approved', 'rejected')
+        LIMIT 1
+    </select>
+
+    <!-- 根据ID列表批量查询（走 resultMap 处理 UUID 类型） -->
+    <select id="selectByIdsMapped" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               c.contact_phone AS customer_phone,
+               e.equipment_name,
+               e.specification AS equipment_spec,
+               r.role_name AS creator_name
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        LEFT JOIN equipment e ON o.equipment_id = e.equipment_id
+        LEFT JOIN sys_user_role r ON o.created_by = r.user_id
+        WHERE o.order_id IN
+        <foreach collection="orderIds" item="id" open="(" separator="," close=")">
+            #{id, typeHandler=com.ordermanager.handler.UUIDTypeHandler}
+        </foreach>
+        AND o.deleted = false
+    </select>
+
+    <!-- 根据ID查询订单详情 -->
+    <select id="selectOrderDetailById" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               c.contact_phone AS customer_phone,
+               c.contact_person,
+               e.equipment_name,
+               e.specification AS equipment_spec,
+               e.equipment_code,
+               r.role_name AS creator_name
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.customer_id
+        LEFT JOIN equipment e ON o.equipment_id = e.equipment_id
+        LEFT JOIN sys_user_role r ON o.created_by = r.user_id
+        WHERE o.order_id = #{orderId} AND o.deleted = false
+    </select>
+
+    <!-- Count orders by equipment (normal only) -->
+    <select id="countOrdersByEquipment" resultType="map">
+        SELECT e.equipment_id AS equipmentId,
+               e.equipment_code AS equipmentCode,
+               e.equipment_name AS equipmentName,
+               e.specification AS specification,
+               COUNT(o.order_id) AS orderCount
+        FROM equipment e
+        LEFT JOIN orders o ON e.equipment_id = o.equipment_id
+            AND o.deleted = false
+            AND o.order_status NOT IN ('completed', 'cancelled')
+        WHERE e.status = 'normal'
+        GROUP BY e.equipment_id, e.equipment_code, e.equipment_name, e.specification
+        ORDER BY COUNT(o.order_id) DESC
+    </select>
+
+    <!-- Query recent 30 days approved sales orders -->
+    <select id="selectRecentAuditedSalesOrders" resultMap="OrderDetailMap">
+        SELECT o.*,
+               c.customer_name,
+               e.equipment_name,
+               e.specification AS equipment_spec
+        FROM orders o
+        INNER JOIN customers c ON o.customer_id = c.customer_id
+        INNER JOIN equipment e ON o.equipment_id = e.equipment_id
+        WHERE o.order_status = 'approved'
+            AND o.order_type = 'sales'
+            AND o.created_at >= (CURRENT_DATE - INTERVAL '30 days')
+            AND o.deleted = false
+        ORDER BY o.order_amount DESC
+        LIMIT 10
+    </select>
+
+    <!-- 自定义更新订单方法：使用内联 typeHandler 处理 UUID 类型，避免 MyBatis-Plus 自动回填导致的类型转换错误 -->
+    <update id="updateOrderById" parameterType="com.ordermanager.entity.Order">
+        UPDATE orders
+        SET
+            customer_id      = #{order.customerId,      typeHandler=com.ordermanager.handler.UUIDTypeHandler},
+            equipment_id     = #{order.equipmentId,     typeHandler=com.ordermanager.handler.UUIDTypeHandler},
+            order_type       = #{order.orderType},
+            order_amount     = #{order.orderAmount},
+            delivery_date    = #{order.deliveryDate},
+            order_status     = #{order.orderStatus},
+            remarks          = #{order.remarks},
+            updated_at       = #{order.updatedAt},
+            last_modified_at = #{order.lastModifiedAt},
+            deleted          = #{order.deleted}
+        WHERE order_id = #{order.orderId, typeHandler=com.ordermanager.handler.UUIDTypeHandler}
+    </update>
+
+</mapper>

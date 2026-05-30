@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: order-manager-backend
+
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/order_manager_db
+    username: postgres
+    password: ${DB_PASSWORD:123456}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      connection-timeout: 20000
+      auto-commit: true
+
+  redis:
+    host: localhost
+    port: 6379
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: true
+      logic-not-delete-value: false
+      id-type: auto
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.ordermanager.entity
+  type-handlers-package: com.ordermanager.handler
+
+jwt:
+  secret: ${JWT_SECRET:OrderManagerSecretKey2024SecureJWT256bitMinimumRequired}
+  expiration: 86400000  # 24 hours
+  header: Authorization
+
+logging:
+  level:
+    com.ordermanager: DEBUG
+    org.springframework.security: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Application secrets (use .example template instead)
+backend/src/main/resources/application.yml
+backend/src/main/resources/application.yml.bak
+
+# Backend
+backend/target/
+backend/*.log
+
+# Test
+coverage/
+
+# Misc
+*.local
